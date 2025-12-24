@@ -7,6 +7,9 @@ A simple, interactive command-line game built with Python. The computer selects 
 - **Input Validation:** Prevents the game from crashing if you type text instead of numbers.
 - **Attempt Counter:** Tracks how many tries it took you to win.
 - **Infinite Loop:** The game runs until you guess correctly.
+- 
+## 📸 Screenshot
+![Gameplay Screenshot](gameplay.png)
 
 ## 🛠️ Technologies Used
 - **Language:** Python 3
@@ -18,3 +21,10 @@ You can play this game on your local machine by following these steps:
 1. **Clone the repository:**
    ```bash
    git clone (https://github.com/dhairyakumar018/Number-Guessing-Game.git)
+2. **Open VS Code Terminal and paste repository**
+3. **After that write in terminal:**
+   ```bash
+   cd Number-Guessing-Game
+4. **Then one more time:**
+  ```bash
+python main.py
