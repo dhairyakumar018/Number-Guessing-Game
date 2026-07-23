@@ -1,5 +1,7 @@
 # MechStrike — Tactical Battle Simulator
 
+> **[▶ Play online](https://dhairyakumar018.github.io/Number-Guessing-Game/)** — the web edition is deployed with GitHub Pages, no install needed.
+
 A simultaneous-turn tactics game on an 8×8 grid: each round you and the enemy AI
 declare actions **at the same time**, then both actions resolve together. Dodge
 the shot the enemy is about to take, cut off its retreat, or fire at the cell it
