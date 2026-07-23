@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MechStrike — Tactical Battle Simulator</title>
+</head>
+<body>
+<style>
+/* ============ MechStrike fire-control console ============
+   Single-theme by design: a dark CRT tactical terminal.
+   IFF convention: cyan = friendly, red = hostile, amber = chrome. */
+:root{
+  color-scheme:dark;
+  --bg:#0b100e; --panel:#111917; --panel2:#0d1513; --inset:#0a0f0d;
+  --line:#22302b; --line2:#2e4038;
+  --amber:#e5a63c; --amber-hi:#ffd489; --amber-dim:#8a6a31;
+  --cyan:#52d6e8; --red:#f0564f; --good:#7bd88a;
+  --text:#c6d2cb; --dim:#69796f;
+  --mono:ui-monospace,"Cascadia Mono","JetBrains Mono",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; color:var(--text); font-family:var(--mono); line-height:1.5;
+  background-color:var(--bg);
+  background-image:radial-gradient(900px 480px at 50% -120px,#131b16,transparent 70%);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;
+}
+.app{max-width:920px;margin:0 auto;padding:0 14px 40px}
+.hidden{display:none !important}
+kbd{
+  border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;
+  padding:1px 5px;font-family:inherit;font-size:.92em;color:var(--text);background:#141d1a;
+}
+
+/* ---- masthead ---- */
+.masthead{
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding:18px 2px 14px;margin-bottom:18px;
+}
+h1{margin:0;font-size:clamp(19px,4.6vw,26px);letter-spacing:.3em;color:var(--amber);font-weight:700}
+h1 b{color:var(--text);font-weight:700}
+.masthead .sub{font-size:11px;letter-spacing:.18em;color:var(--dim)}
+
+/* ---- buttons ---- */
+.btn{
+  font-family:inherit;font-size:13px;background:#141d1a;border:1px solid var(--line2);
+  color:var(--text);border-radius:5px;cursor:pointer;padding:10px 14px;letter-spacing:.08em;
+  transition:border-color .12s,color .12s,box-shadow .12s,transform .05s;
+}
+.btn:hover:not(:disabled){border-color:var(--amber);color:var(--amber-hi)}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.3;cursor:default}
+.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+/* ---- menu ---- */
+.emblem{
+  position:relative;width:118px;height:118px;margin:30px auto 8px;
+  display:grid;grid-template:repeat(8,1fr)/repeat(8,1fr);gap:3px;
+}
+.emblem i{background:#16211c;border-radius:2px}
+.emblem i.p{background:var(--cyan);box-shadow:0 0 8px rgba(82,214,232,.6)}
+.emblem i.e{background:var(--red);box-shadow:0 0 8px rgba(240,86,79,.55)}
+.emblem i.o{background:#243027}
+.emblem::after{
+  content:"";position:absolute;inset:-12px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(from 0deg,rgba(229,166,60,.15),transparent 26%);
+  animation:sweep 4.2s linear infinite;
+}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.tagline{max-width:44ch;margin:6px auto 0;text-align:center;font-size:12.5px;color:var(--dim);letter-spacing:.04em}
+.menu{max-width:430px;margin:26px auto 0;display:flex;flex-direction:column;gap:10px}
+.mbtn{display:flex;align-items:center;gap:14px;text-align:left;padding:14px 16px;font-size:14px;letter-spacing:.12em}
+.mbtn .no{color:var(--amber);font-weight:700}
+.mbtn small{margin-left:auto;color:var(--dim);font-size:11px;letter-spacing:.08em}
+.menu-note{max-width:52ch;margin:24px auto 0;text-align:center;font-size:11px;color:var(--dim);letter-spacing:.06em;line-height:2}
+
+/* ---- HUD ---- */
+.hud{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch;margin-bottom:14px}
+.mech{border:1px solid var(--line);background:var(--panel);padding:10px 12px;border-radius:6px;min-width:0}
+.mech .tag{display:flex;justify-content:space-between;gap:2px 8px;flex-wrap:wrap;font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.mech .tag b,.mech .tag span{white-space:nowrap}
+.mech .tag b{color:var(--cyan);font-weight:700}
+.mech.hostile .tag b{color:var(--red)}
+.bar{height:10px;background:var(--inset);border:1px solid var(--line);border-radius:3px;margin:8px 0 6px;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;border-radius:2px;background:linear-gradient(90deg,#2fa9bd,var(--cyan));transition:width .3s}
+.mech.hostile .bar i{background:linear-gradient(90deg,#c93a34,var(--red))}
+.mech .bar i.low{background:linear-gradient(90deg,#8a4a1f,var(--amber))}
+.mech .nums{display:flex;justify-content:space-between;gap:2px 8px;flex-wrap:wrap;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+.roundbox{
+  border:1px solid var(--line);background:var(--panel2);padding:8px 16px;border-radius:6px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:96px;
+}
+.roundbox .lbl{font-size:10px;letter-spacing:.22em;color:var(--dim)}
+.roundbox .num{font-size:26px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums}
+.roundbox .dist{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---- battlefield scope ---- */
+.battle{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,300px);gap:16px;align-items:stretch}
+.scope{
+  position:relative;padding:14px;border:1px solid var(--line);border-radius:6px;
+  max-width:462px;margin:0 auto;
+  background:radial-gradient(120% 100% at 50% 0%,#101a16 0%,var(--inset) 75%);
+}
+.scope::before{
+  content:"";position:absolute;inset:0;pointer-events:none;border-radius:6px;
+  background:repeating-linear-gradient(0deg,rgba(198,210,203,.028) 0 1px,transparent 1px 3px);
+}
+.corner{position:absolute;width:16px;height:16px;border:0 solid var(--amber);opacity:.75}
+.c-tl{top:-1px;left:-1px;border-top-width:2px;border-left-width:2px}
+.c-tr{top:-1px;right:-1px;border-top-width:2px;border-right-width:2px}
+.c-bl{bottom:-1px;left:-1px;border-bottom-width:2px;border-left-width:2px}
+.c-br{bottom:-1px;right:-1px;border-bottom-width:2px;border-right-width:2px}
+.grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.grid.shake{animation:shake .3s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translate(-4px,1px)}50%{transform:translate(4px,-1px)}75%{transform:translate(-2px,0)}}
+.cell{
+  aspect-ratio:1/1;position:relative;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:clamp(13px,4.6vw,21px);
+  border:1px solid #1c2823;background:var(--inset);
+  transition:background .12s,box-shadow .12s;
+}
+.cell.range{background:#0e1a1c;box-shadow:inset 0 0 0 1px rgba(82,214,232,.22)}
+.cell.obstacle{
+  background:repeating-linear-gradient(45deg,#232e21 0 5px,#161f1a 5px 10px);
+  border-color:#31402f;
+}
+.cell.probot{
+  background:linear-gradient(180deg,#6fe3f2,#2fa9bd);color:#04252b;
+  border-color:#7ae7f5;box-shadow:0 0 12px rgba(82,214,232,.45);
+}
+.cell.erobot{
+  background:linear-gradient(180deg,#ff7d72,#c93a34);color:#2b0806;
+  border-color:#ff8d84;box-shadow:0 0 12px rgba(240,86,79,.4);
+}
+.cell.threat{animation:threat 1s steps(2,end) infinite}
+@keyframes threat{50%{outline:2px solid var(--amber);outline-offset:-2px}}
+.cell.flash{animation:flash .45s ease-out}
+@keyframes flash{from{filter:brightness(2.4);box-shadow:0 0 24px 6px rgba(255,255,255,.55)}}
+.pip{
+  position:absolute;left:50%;top:-2px;transform:translate(-50%,0);z-index:6;pointer-events:none;
+  font-size:11px;font-weight:700;letter-spacing:.08em;text-shadow:0 0 6px rgba(0,0,0,.85);
+  animation:rise .8s ease-out forwards;
+}
+.pip.dmg{color:var(--amber-hi)}
+.pip.miss{color:var(--dim)}
+.pip.clash{color:var(--amber)}
+@keyframes rise{to{transform:translate(-50%,-24px);opacity:0}}
+
+/* ---- status + controls ---- */
+.status{margin-top:10px;text-align:center;font-size:12.5px;letter-spacing:.06em;color:var(--dim);min-height:20px}
+.status.warn{color:var(--amber);animation:blink 1s steps(2,end) infinite}
+@keyframes blink{50%{opacity:.45}}
+.controls{display:flex;gap:18px;justify-content:center;align-items:center;margin-top:12px;flex-wrap:wrap}
+.dpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(2,44px);gap:6px}
+.key{padding:0;font-size:15px}
+.key.up{grid-column:2;grid-row:1}
+.key.left{grid-column:1;grid-row:2}
+.key.down{grid-column:2;grid-row:2}
+.key.right{grid-column:3;grid-row:2}
+.fire{
+  height:64px;padding:0 26px;border-radius:6px;font-size:16px;font-weight:700;letter-spacing:.22em;
+  background:linear-gradient(180deg,#7e2723,#541815);border-color:#a03a33;color:#ffd9d5;
+}
+.fire:hover:not(:disabled){border-color:var(--red);color:#fff;box-shadow:0 0 14px rgba(240,86,79,.35)}
+.flee{font-size:11px;color:var(--dim);background:none;border-color:var(--line)}
+.flee.armed{border-color:var(--amber);color:var(--amber);animation:blink 1s steps(2,end) infinite}
+.opt{
+  display:flex;gap:8px;justify-content:center;align-items:center;margin-top:12px;
+  font-size:11px;color:var(--dim);letter-spacing:.08em;cursor:pointer;
+}
+.opt input{accent-color:var(--amber)}
+
+/* ---- combat log ---- */
+.logcol{display:flex;flex-direction:column;border:1px solid var(--line);background:var(--panel2);border-radius:6px;overflow:hidden;min-width:0}
+.logtitle{padding:8px 12px;font-size:11px;letter-spacing:.22em;color:var(--amber);border-bottom:1px solid var(--line);background:#131c18}
+.log{flex:1;overflow-y:auto;padding:10px 12px;font-size:12.5px;line-height:1.55;min-height:140px;max-height:520px;overflow-wrap:break-word}
+.log p{margin:0 0 2px}
+.log .lp{color:var(--cyan)}
+.log .le{color:#ff9c94}
+.log .warn{color:var(--amber)}
+.log .dim{color:var(--dim)}
+.log .good{color:var(--good)}
+
+/* ---- result overlay ---- */
+#screen-game{position:relative}
+.overlay{
+  position:absolute;inset:-8px;z-index:20;border-radius:8px;
+  background:rgba(8,12,10,.86);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;
+}
+.obox{
+  border:1px solid var(--line2);background:var(--panel);border-radius:8px;
+  padding:28px 34px;text-align:center;box-shadow:0 0 40px rgba(0,0,0,.6);max-width:92%;
+}
+.otitle{font-size:24px;font-weight:700;letter-spacing:.3em;margin-bottom:8px}
+.otitle.win{color:var(--good);text-shadow:0 0 18px rgba(123,216,138,.5)}
+.otitle.loss{color:var(--red);text-shadow:0 0 18px rgba(240,86,79,.5)}
+.otitle.draw{color:var(--amber);text-shadow:0 0 18px rgba(229,166,60,.5)}
+.osub{max-width:44ch;margin:0 auto 18px;color:var(--dim);font-size:13px}
+.obtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+/* ---- sub-screens ---- */
+.screen-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 14px}
+.screen-head h2{margin:0;font-size:14px;letter-spacing:.26em;color:var(--amber);font-weight:700}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:560px;margin:20px auto 0}
+.stat{border:1px solid var(--line);background:var(--panel);padding:14px;border-radius:6px;text-align:center}
+.stat .v{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.stat.win .v{color:var(--good)}
+.stat.loss .v{color:var(--red)}
+.stat.draw .v{color:var(--amber)}
+.stat.rate .v{color:var(--cyan)}
+.stat .k{font-size:10px;letter-spacing:.2em;color:var(--dim);margin-top:4px}
+.stats-actions{text-align:center;margin-top:20px}
+.help{max-width:640px;margin:0 auto;font-size:13.5px}
+.help h3{font-size:12px;letter-spacing:.22em;color:var(--amber);margin:24px 0 8px}
+.help p{margin:6px 0}
+.help ul,.help ol{margin:6px 0;padding-left:20px}
+.help li{margin:5px 0}
+.help li::marker{color:var(--amber)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+.legend .chip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dim)}
+.sw{width:20px;height:20px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;border:1px solid #1c2823;background:var(--inset)}
+.sw.p{background:linear-gradient(180deg,#6fe3f2,#2fa9bd);color:#04252b;border-color:#7ae7f5}
+.sw.e{background:linear-gradient(180deg,#ff7d72,#c93a34);color:#2b0806;border-color:#ff8d84}
+.sw.o{background:repeating-linear-gradient(45deg,#232e21 0 5px,#161f1a 5px 10px);border-color:#31402f}
+
+.foot{margin-top:36px;text-align:center;font-size:11px;color:var(--dim);letter-spacing:.08em}
+
+@media (max-width:860px){
+  .battle{grid-template-columns:1fr}
+  .log{min-height:0;max-height:190px}
+}
+@media (max-width:620px){
+  .hud{grid-template-columns:1fr 1fr}
+  .roundbox{grid-column:1 / -1;grid-row:1;flex-direction:row;gap:14px;padding:6px 12px}
+  .roundbox .num{font-size:20px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .dpad{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,40px)}
+  .fire{height:56px;padding:0 18px;font-size:14px}
+  .controls{gap:12px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+}
+</style>
+
+<div class="app">
+  <header class="masthead">
+    <h1>MECH<b>STRIKE</b></h1>
+    <span class="sub">SIMULTANEOUS-TURN TACTICAL SIM</span>
+  </header>
+
+  <!-- ================= MENU ================= -->
+  <section id="screen-menu">
+    <div class="emblem" id="emblem" aria-hidden="true"></div>
+    <p class="tagline">Fire-control console ready. You and the enemy act at the same instant — dodge the shot it is about to take, and fire where it is about to be.</p>
+    <nav class="menu">
+      <button class="btn mbtn" id="m-new"><span class="no">1</span> NEW GAME <small>start a battle</small></button>
+      <button class="btn mbtn" id="m-stats"><span class="no">2</span> STATISTICS <small>service record</small></button>
+      <button class="btn mbtn" id="m-help"><span class="no">3</span> INSTRUCTIONS <small>field manual</small></button>
+    </nav>
+    <p class="menu-note">
+      Menu: press <kbd>1</kbd>–<kbd>3</kbd> &nbsp;·&nbsp; In battle: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows move,
+      <kbd>F</kbd> / <kbd>Space</kbd> fire, <kbd>Q</kbd> flee
+    </p>
+  </section>
+
+  <!-- ================= BATTLE ================= -->
+  <section id="screen-game" class="hidden">
+    <div class="hud">
+      <div class="mech">
+        <div class="tag"><b>Player — P</b><span>ATK 20 · RNG 2</span></div>
+        <div class="bar"><i id="pbar"></i></div>
+        <div class="nums"><span id="php">100/100</span><span>IFF FRIENDLY</span></div>
+      </div>
+      <div class="roundbox">
+        <span class="lbl">ROUND</span>
+        <span class="num" id="round">1</span>
+        <span class="dist" id="dist">DIST 10</span>
+      </div>
+      <div class="mech hostile">
+        <div class="tag"><b>Enemy — E</b><span>ATK 15 · RNG 2</span></div>
+        <div class="bar"><i id="ebar"></i></div>
+        <div class="nums"><span id="ehp">100/100</span><span>IFF HOSTILE</span></div>
+      </div>
+    </div>
+
+    <div class="battle">
+      <div class="fieldcol">
+        <div class="scope">
+          <i class="corner c-tl"></i><i class="corner c-tr"></i><i class="corner c-bl"></i><i class="corner c-br"></i>
+          <div class="grid" id="grid" aria-hidden="true"></div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="controls">
+          <div class="dpad">
+            <button class="btn key up" id="k-w" aria-label="Move up">▲</button>
+            <button class="btn key left" id="k-a" aria-label="Move left">◀</button>
+            <button class="btn key down" id="k-s" aria-label="Move down">▼</button>
+            <button class="btn key right" id="k-d" aria-label="Move right">▶</button>
+          </div>
+          <button class="btn fire" id="k-f">FIRE</button>
+          <button class="btn flee" id="k-q" title="Abandon the battle — counts as a loss">FLEE</button>
+        </div>
+        <label class="opt"><input type="checkbox" id="rangechk" checked> show firing range</label>
+      </div>
+      <div class="logcol">
+        <div class="logtitle">COMBAT LOG</div>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="overlay">
+      <div class="obox">
+        <div class="otitle" id="otitle"></div>
+        <p class="osub" id="osub"></p>
+        <div class="obtns">
+          <button class="btn" id="o-rematch">REMATCH</button>
+          <button class="btn" id="o-menu">MAIN MENU</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STATISTICS ================= -->
+  <section id="screen-stats" class="hidden">
+    <div class="screen-head">
+      <h2>GAME STATISTICS</h2>
+      <button class="btn" id="st-back">◀ MENU</button>
+    </div>
+    <div id="stats-body"></div>
+    <div class="stats-actions"><button class="btn flee" id="st-clear">CLEAR RECORD</button></div>
+  </section>
+
+  <!-- ================= INSTRUCTIONS ================= -->
+  <section id="screen-help" class="hidden">
+    <div class="screen-head">
+      <h2>INSTRUCTIONS</h2>
+      <button class="btn" id="h-back">◀ MENU</button>
+    </div>
+    <div class="help">
+      <p>You command the mech <b>P</b>. Destroy the enemy mech <b>E</b> before it destroys you.</p>
+
+      <h3>Symbols</h3>
+      <div class="legend">
+        <span class="chip"><span class="sw p">P</span> your mech</span>
+        <span class="chip"><span class="sw e">E</span> enemy mech</span>
+        <span class="chip"><span class="sw o"></span> obstacle — blocks movement</span>
+        <span class="chip"><span class="sw"></span> empty cell</span>
+      </div>
+
+      <h3>Controls</h3>
+      <ul>
+        <li><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or arrow keys — move up / left / down / right</li>
+        <li><kbd>F</kbd> or <kbd>Space</kbd> — fire (always allowed, hits if the enemy is in range <em>after</em> both moves)</li>
+        <li><kbd>Q</kbd> — flee the battle (counts as a loss)</li>
+        <li>On touch screens, use the on-screen D-pad and FIRE button.</li>
+      </ul>
+
+      <h3>Simultaneous rounds</h3>
+      <ul>
+        <li>You and the enemy declare actions at the <em>same time</em>; both then happen together.</li>
+        <li>Moving to the same cell — or swapping cells — is a <b>CLASH</b>: both mechs bounce back to where they were.</li>
+        <li>Stepping into the cell the enemy just left is legal — you slip in behind it.</li>
+        <li>Shots resolve <em>after</em> movement: dodge out of range to avoid damage, or fire where the enemy is <em>about</em> to be.</li>
+        <li>Both mechs can be destroyed in the same round — that's a <b>DRAW</b>.</li>
+      </ul>
+
+      <h3>Enemy AI</h3>
+      <ol>
+        <li>If you start the round in its range (2 cells), it <b>fires</b>.</li>
+        <li>If its health is below 30%, it <b>retreats</b> — moves away from you.</li>
+        <li>Otherwise it <b>advances</b> — moves toward you.</li>
+      </ol>
+
+      <h3>Tactics</h3>
+      <ul>
+        <li>Range is Manhattan distance — steps up/down/left/right, not diagonals.</li>
+        <li>Use obstacles to control the enemy's approach lanes.</li>
+        <li>The enemy fires when you <em>start</em> a round in its range — predict it and step out before the shot lands.</li>
+        <li>A retreating enemy is nearly beaten — chase it down.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="foot">MechStrike runs entirely in this page — no install, no account. Results are saved on this device.</footer>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   MechStrike — browser edition.
+   A faithful port of the C++ console game (see main.cpp): same grid,
+   same simultaneous-round resolution, same enemy AI, same statistics.
+   ===================================================================== */
+
+var GRID_ROWS = 8, GRID_COLS = 8, OBSTACLE_COUNT = 8;
+var CELL_EMPTY = '.', CELL_OBSTACLE = '#', CELL_PLAYER = 'P', CELL_ENEMY = 'E';
+
+function randInt(n) { return Math.floor(Math.random() * n); }
+
+/* ========================= Robot ========================= */
+class Robot {
+  constructor(name, hp, atk, range) {
+    this.name = name;
+    this.health = hp;
+    this.maxHealth = hp;
+    this.attackPower = atk;
+    this.attackRange = range;   // Manhattan-distance attack range
+    this.row = 0;
+    this.col = 0;
+  }
+  setPosition(r, c) { this.row = r; this.col = c; }
+  takeDamage(dmg) { this.health -= dmg; if (this.health < 0) this.health = 0; }
+  isAlive() { return this.health > 0; }
+  distanceTo(other) { return Math.abs(this.row - other.row) + Math.abs(this.col - other.col); }
+  inRangeOf(other) { return this.distanceTo(other) <= this.attackRange; }
+}
+
+/* ====================== Battlefield ====================== */
+class Battlefield {
+  constructor() { this.clear(); }
+  clear() {
+    this.grid = [];
+    for (var r = 0; r < GRID_ROWS; r++) {
+      var row = [];
+      for (var c = 0; c < GRID_COLS; c++) row.push(CELL_EMPTY);
+      this.grid.push(row);
+    }
+  }
+  isInside(r, c) { return r >= 0 && r < GRID_ROWS && c >= 0 && c < GRID_COLS; }
+  isWalkable(r, c) { return this.isInside(r, c) && this.grid[r][c] === CELL_EMPTY; }
+  setCell(r, c, ch) { if (this.isInside(r, c)) this.grid[r][c] = ch; }
+  getCell(r, c) { return this.isInside(r, c) ? this.grid[r][c] : CELL_OBSTACLE; }
+  placeObstacles(count) {
+    var placed = 0;
+    while (placed < count) {
+      var r = randInt(GRID_ROWS), c = randInt(GRID_COLS);
+      if (this.grid[r][c] === CELL_EMPTY) { this.grid[r][c] = CELL_OBSTACLE; placed++; }
+    }
+  }
+}
+
+/* ========================= AI ============================
+   Rule 1: player in attack range        -> FIRE
+   Rule 2: own health low (< 30%)        -> RETREAT (move away)
+   Rule 3: otherwise                     -> CHASE   (move closer)
+   Decides from start-of-round state only — it cannot see the
+   player's declaration, and the player cannot see its. */
+var EnemyAI = {
+  directionName: function (dr, dc) {
+    if (dr === -1) return 'up';
+    if (dr === 1) return 'down';
+    if (dc === -1) return 'left';
+    if (dc === 1) return 'right';
+    return 'nowhere';
+  },
+  decide: function (enemy, player, field) {
+    var act = { type: 'HOLD', destR: enemy.row, destC: enemy.col, label: 'HOLD position' };
+
+    if (enemy.inRangeOf(player)) {
+      act.type = 'ATTACK';
+      act.label = 'FIRE at your position';
+      return act;
+    }
+
+    var retreat = Math.floor(enemy.health * 100 / enemy.maxHealth) < 30;
+    var bestR = enemy.row, bestC = enemy.col;
+    var bestDist = player.distanceTo(enemy);
+    var dr = [-1, 1, 0, 0], dc = [0, 0, -1, 1];
+
+    for (var i = 0; i < 4; i++) {
+      var nr = enemy.row + dr[i], nc = enemy.col + dc[i];
+      if (!field.isWalkable(nr, nc)) continue;
+      var dist = Math.abs(nr - player.row) + Math.abs(nc - player.col);
+      if (retreat ? dist > bestDist : dist < bestDist) { bestDist = dist; bestR = nr; bestC = nc; }
+    }
+
+    if (bestR !== enemy.row || bestC !== enemy.col) {
+      act.type = 'MOVE';
+      act.destR = bestR;
+      act.destC = bestC;
+      act.label = (retreat ? 'RETREAT ' : 'ADVANCE ') + EnemyAI.directionName(bestR - enemy.row, bestC - enemy.col);
+    }
+    return act;
+  }
+};
+
+/* ======================= Statistics ======================
+   The console version appends WIN/LOSS/DRAW,rounds to stats.txt;
+   here the same records go to localStorage (with an in-memory
+   fallback so the game still runs where storage is blocked). */
+var _memStore = {};
+function storeGet(k) {
+  try { if (typeof localStorage !== 'undefined' && localStorage) return localStorage.getItem(k); } catch (err) { /* blocked */ }
+  return Object.prototype.hasOwnProperty.call(_memStore, k) ? _memStore[k] : null;
+}
+function storeSet(k, v) {
+  try { if (typeof localStorage !== 'undefined' && localStorage) { localStorage.setItem(k, v); return; } } catch (err) { /* blocked */ }
+  _memStore[k] = String(v);
+}
+
+var Stats = {
+  KEY: 'mechstrike.stats.v1',
+  load: function () {
+    try {
+      var raw = storeGet(this.KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (err) { return []; }
+  },
+  record: function (result, moves) {
+    var arr = this.load();
+    arr.push({ r: result, m: Number(moves) || 0 });
+    storeSet(this.KEY, JSON.stringify(arr));
+  },
+  clear: function () { storeSet(this.KEY, '[]'); },
+  summary: function () {
+    var arr = this.load();
+    var s = { total: arr.length, wins: 0, losses: 0, draws: 0, winRate: 0, avgRounds: 0 };
+    var totalMoves = 0;
+    for (var i = 0; i < arr.length; i++) {
+      var g = arr[i];
+      if (g.r === 'WIN') s.wins++;
+      else if (g.r === 'LOSS') s.losses++;
+      else if (g.r === 'DRAW') s.draws++;
+      totalMoves += g.m;
+    }
+    if (s.total > 0) {   // integer division, exactly like the console version
+      s.winRate = Math.floor(s.wins * 100 / s.total);
+      s.avgRounds = Math.floor(totalMoves / s.total);
+    }
+    return s;
+  }
+};
+
+/* ========================= Game ==========================
+   One simultaneous round:
+     1) Movement phase — both moves at once. Same destination, or
+        swapping cells, is a CLASH: both bounce back.
+     2) Attack phase — shots resolve on POST-move positions; damage
+        lands after both hit checks, so both mechs can die (DRAW). */
+class Game {
+  constructor() {
+    this.field = new Battlefield();
+    this.player = new Robot('Player', 100, 20, 2);
+    this.enemy = new Robot('Enemy', 100, 15, 2);
+    this.moveCount = 0;
+    this.over = false;
+    this.result = null;
+    this.fled = false;
+  }
+
+  start() {
+    this.field.clear();
+    this.field.placeObstacles(OBSTACLE_COUNT);
+    this.placeRobots();
+  }
+
+  placeRobots() {
+    this.player.setPosition(1, 1);
+    this.enemy.setPosition(GRID_ROWS - 2, GRID_COLS - 2);
+    this.field.setCell(1, 1, CELL_EMPTY);                          // ensure free
+    this.field.setCell(GRID_ROWS - 2, GRID_COLS - 2, CELL_EMPTY);
+    this.field.setCell(this.player.row, this.player.col, CELL_PLAYER);
+    this.field.setCell(this.enemy.row, this.enemy.col, CELL_ENEMY);
+  }
+
+  /* Validate the command and build the player's DECLARED action.
+     Invalid input costs nothing — the round is not used. */
+  buildPlayerAction(cmd) {
+    var act = { type: 'HOLD', destR: this.player.row, destC: this.player.col, label: 'hold position' };
+    var dr = 0, dc = 0;
+
+    switch (cmd) {
+      case 'w': dr = -1; act.label = 'MOVE up'; break;
+      case 's': dr = 1; act.label = 'MOVE down'; break;
+      case 'a': dc = -1; act.label = 'MOVE left'; break;
+      case 'd': dc = 1; act.label = 'MOVE right'; break;
+      case 'f':
+        /* Firing is ALWAYS allowed — the enemy may walk INTO range this round. */
+        act.type = 'ATTACK';
+        act.label = 'FIRE';
+        return { ok: true, act: act };
+      default:
+        return { ok: false, msg: 'Invalid command! Use W, A, S, D, F, or Q.' };
+    }
+
+    var nr = this.player.row + dr, nc = this.player.col + dc;
+    if (!this.field.isInside(nr, nc)) return { ok: false, msg: 'You cannot move outside the battlefield!' };
+    if (this.field.getCell(nr, nc) === CELL_OBSTACLE) return { ok: false, msg: 'An obstacle blocks your path!' };
+    /* Moving toward the enemy's CURRENT cell is allowed: if it moves
+       away you slip in behind it; if it stays, you clash and bounce. */
+
+    act.type = 'MOVE';
+    act.destR = nr;
+    act.destC = nc;
+    return { ok: true, act: act };
+  }
+
+  /* Resolve one simultaneous round from two declared actions. */
+  resolveRound(pAct, eAct) {
+    var ev = [{ t: 'declare', p: pAct.label, e: eAct.label }];
+
+    var pOldR = this.player.row, pOldC = this.player.col;
+    var eOldR = this.enemy.row, eOldC = this.enemy.col;
+    var pNewR = pAct.destR, pNewC = pAct.destC;
+    var eNewR = eAct.destR, eNewC = eAct.destC;
+
+    var sameCell = (pNewR === eNewR && pNewC === eNewC);
+    var swapped = (pNewR === eOldR && pNewC === eOldC && eNewR === pOldR && eNewC === pOldC);
+
+    if (sameCell || swapped) {
+      ev.push({ t: 'clash' });
+      pNewR = pOldR; pNewC = pOldC;
+      eNewR = eOldR; eNewC = eOldC;
+    }
+
+    this.field.setCell(pOldR, pOldC, CELL_EMPTY);
+    this.field.setCell(eOldR, eOldC, CELL_EMPTY);
+    this.player.setPosition(pNewR, pNewC);
+    this.enemy.setPosition(eNewR, eNewC);
+    this.field.setCell(pNewR, pNewC, CELL_PLAYER);
+    this.field.setCell(eNewR, eNewC, CELL_ENEMY);
+
+    var playerHits = (pAct.type === 'ATTACK') && this.player.inRangeOf(this.enemy);
+    var enemyHits = (eAct.type === 'ATTACK') && this.enemy.inRangeOf(this.player);
+
+    if (pAct.type === 'ATTACK') {
+      ev.push({
+        t: 'pshot', hit: playerHits, dmg: this.player.attackPower,
+        range: this.player.attackRange, dist: this.player.distanceTo(this.enemy)
+      });
+    }
+    if (eAct.type === 'ATTACK') {
+      ev.push({ t: 'eshot', hit: enemyHits, dmg: this.enemy.attackPower });
+    }
+
+    if (playerHits) this.enemy.takeDamage(this.player.attackPower);
+    if (enemyHits) this.player.takeDamage(this.enemy.attackPower);
+    return ev;
+  }
+
+  /* One player command in, one resolved round out (or an error). */
+  submit(cmd) {
+    if (this.over) return { invalid: true, msg: 'The battle is over.' };
+    cmd = String(cmd).toLowerCase();
+
+    if (cmd === 'q') {
+      this.over = true;
+      this.result = 'LOSS';
+      this.fled = true;
+      Stats.record('LOSS', this.moveCount);
+      return { fled: true };
+    }
+
+    var built = this.buildPlayerAction(cmd);
+    if (!built.ok) return { invalid: true, msg: built.msg };
+
+    /* Enemy decides from the same start-of-round state, blind to the
+       player's declaration. */
+    var eAct = EnemyAI.decide(this.enemy, this.player, this.field);
+    var events = this.resolveRound(built.act, eAct);
+    this.moveCount++;
+
+    var pAlive = this.player.isAlive(), eAlive = this.enemy.isAlive();
+    if (!pAlive || !eAlive) {
+      this.over = true;
+      this.result = (!pAlive && !eAlive) ? 'DRAW' : (!eAlive ? 'WIN' : 'LOSS');
+      Stats.record(this.result, this.moveCount);
+    }
+    return { events: events };
+  }
+}
+
+/* ========================= UI ============================ */
+function initUI() {
+  var $ = function (id) { return document.getElementById(id); };
+  var screens = { menu: $('screen-menu'), game: $('screen-game'), stats: $('screen-stats'), help: $('screen-help') };
+  var current = 'menu';
+  var game = null;
+  var fleeArmed = false, fleeTimer = null;
+  var clearArmed = false, clearTimer = null;
+
+  function show(name) {
+    current = name;
+    for (var k in screens) screens[k].classList.toggle('hidden', k !== name);
+  }
+
+  /* battlefield cells (built once) */
+  var gridEl = $('grid'), cells = [];
+  for (var i = 0; i < GRID_ROWS * GRID_COLS; i++) {
+    var d = document.createElement('div');
+    d.className = 'cell';
+    gridEl.appendChild(d);
+    cells.push(d);
+  }
+  function cellAt(r, c) { return cells[r * GRID_COLS + c]; }
+
+  /* menu emblem: a miniature of the battlefield */
+  (function buildEmblem() {
+    var host = $('emblem');
+    var obs = [[0, 5], [2, 2], [2, 6], [4, 1], [5, 4], [6, 2]];
+    for (var r = 0; r < 8; r++) {
+      for (var c = 0; c < 8; c++) {
+        var dot = document.createElement('i');
+        if (r === 1 && c === 1) dot.className = 'p';
+        else if (r === 6 && c === 6) dot.className = 'e';
+        else for (var o = 0; o < obs.length; o++) if (obs[o][0] === r && obs[o][1] === c) dot.className = 'o';
+        host.appendChild(dot);
+      }
+    }
+  })();
+
+  var logEl = $('log');
+  function log(msg, cls) {
+    var p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = msg;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function pip(cell, text, cls) {
+    var s = document.createElement('span');
+    s.className = 'pip ' + cls;
+    s.textContent = text;
+    cell.appendChild(s);
+    setTimeout(function () { s.remove(); }, 900);
+  }
+  function flash(cell) { cell.classList.remove('flash'); void cell.offsetWidth; cell.classList.add('flash'); }
+  function shakeGrid() { gridEl.classList.remove('shake'); void gridEl.offsetWidth; gridEl.classList.add('shake'); }
+
+  function render() {
+    if (!game) return;
+    var p = game.player, e = game.enemy;
+    var showRange = $('rangechk').checked;
+    var lock = p.distanceTo(e) <= p.attackRange;
+
+    for (var r = 0; r < GRID_ROWS; r++) {
+      for (var c = 0; c < GRID_COLS; c++) {
+        var d = cellAt(r, c), ch = game.field.getCell(r, c);
+        var cls = 'cell', txt = '';
+        if (ch === CELL_OBSTACLE) cls += ' obstacle';
+        if (showRange && ch !== CELL_OBSTACLE && (Math.abs(r - p.row) + Math.abs(c - p.col)) <= p.attackRange) cls += ' range';
+        if (ch === CELL_PLAYER) { cls += ' probot' + (lock && !game.over ? ' threat' : ''); txt = 'P'; }
+        else if (ch === CELL_ENEMY) { cls += ' erobot' + (lock && !game.over ? ' threat' : ''); txt = 'E'; }
+        d.className = cls;
+        d.textContent = txt;
+      }
+    }
+
+    $('pbar').style.width = (p.health * 100 / p.maxHealth) + '%';
+    $('pbar').classList.toggle('low', p.health * 100 / p.maxHealth < 30);
+    $('php').textContent = p.health + '/' + p.maxHealth;
+    $('ebar').style.width = (e.health * 100 / e.maxHealth) + '%';
+    $('ebar').classList.toggle('low', e.health * 100 / e.maxHealth < 30);
+    $('ehp').textContent = e.health + '/' + e.maxHealth;
+    $('round').textContent = String(game.over ? game.moveCount : game.moveCount + 1);
+    $('dist').textContent = 'DIST ' + p.distanceTo(e);
+
+    var dirs = { 'k-w': [-1, 0], 'k-s': [1, 0], 'k-a': [0, -1], 'k-d': [0, 1] };
+    for (var id in dirs) {
+      var nr = p.row + dirs[id][0], nc = p.col + dirs[id][1];
+      $(id).disabled = game.over || !game.field.isInside(nr, nc) || game.field.getCell(nr, nc) === CELL_OBSTACLE;
+    }
+    $('k-f').disabled = game.over;
+    $('k-q').disabled = game.over;
+
+    var st = $('status');
+    if (game.over) { st.textContent = ''; st.className = 'status'; }
+    else if (lock) { st.textContent = '⚠ WEAPONS LOCK — the enemy will fire this round. Dodge or shoot!'; st.className = 'status warn'; }
+    else { st.textContent = 'Out of range — guns reach ' + p.attackRange + ' cells (Manhattan distance).'; st.className = 'status'; }
+  }
+
+  function playback(res) {
+    if (!res || !res.events) return;
+    log('— ROUND ' + game.moveCount + ' —', 'dim');
+    for (var i = 0; i < res.events.length; i++) {
+      var ev = res.events[i];
+      if (ev.t === 'declare') {
+        log('You declared:   ' + ev.p, 'lp');
+        log('Enemy declared: ' + ev.e, 'le');
+      } else if (ev.t === 'clash') {
+        log('>> CLASH! Both robots collided and bounced back!', 'warn');
+        shakeGrid();
+        pip(cellAt(game.player.row, game.player.col), 'CLASH', 'clash');
+      } else if (ev.t === 'pshot') {
+        var ec = cellAt(game.enemy.row, game.enemy.col);
+        if (ev.hit) {
+          log('>> Your shot HITS Enemy for ' + ev.dmg + ' damage!', 'good');
+          flash(ec); pip(ec, '-' + ev.dmg, 'dmg');
+        } else {
+          log('>> Your shot MISSES — Enemy is out of range! (Range: ' + ev.range + ', Distance: ' + ev.dist + ')', 'dim');
+          pip(ec, 'MISS', 'miss');
+        }
+      } else if (ev.t === 'eshot') {
+        var pc = cellAt(game.player.row, game.player.col);
+        if (ev.hit) {
+          log(">> Enemy's shot HITS you for " + ev.dmg + ' damage!', 'le');
+          flash(pc); pip(pc, '-' + ev.dmg, 'dmg');
+        } else {
+          log(">> Enemy's shot MISSES — you dodged out of range!", 'good');
+          pip(pc, 'MISS', 'miss');
+        }
+      }
+    }
+  }
+
+  function finish() {
+    var t = $('otitle'), s = $('osub'), cls, title, sub;
+    if (game.fled) {
+      cls = 'loss'; title = 'WITHDRAWN';
+      sub = 'You fled the battle — recorded as a LOSS.';
+      log('You fled the battle! Counted as a LOSS.', 'warn');
+    } else if (game.result === 'DRAW') {
+      cls = 'draw'; title = 'MUTUAL DESTRUCTION';
+      sub = "Both mechs fired their final shots at the same instant. It's a DRAW after " + game.moveCount + ' rounds.';
+      log("*** MUTUAL DESTRUCTION! It's a DRAW! ***", 'warn');
+    } else if (game.result === 'WIN') {
+      cls = 'win'; title = 'VICTORY';
+      sub = 'Enemy mech destroyed in ' + game.moveCount + ' rounds.';
+      log('*** You defeated the enemy robot! YOU WIN! ***', 'good');
+    } else {
+      cls = 'loss'; title = 'MECH DESTROYED';
+      sub = 'Your mech went down after ' + game.moveCount + ' rounds.';
+      log('*** Your robot was destroyed! YOU LOSE! ***', 'le');
+    }
+    log('Result saved to statistics.', 'dim');
+    t.textContent = title;
+    t.className = 'otitle ' + cls;
+    s.textContent = sub;
+    $('overlay').classList.remove('hidden');
+  }
+
+  function handle(cmd) {
+    if (current !== 'game' || !game || game.over) return;
+    disarmFlee();
+    var res = game.submit(cmd);
+    if (res.invalid) { log('>> ' + res.msg, 'warn'); return; }
+    render();      // state first…
+    playback(res); // …then effects, so pips/flashes survive the redraw
+    if (game.over) finish();
+  }
+
+  function newGame() {
+    game = new Game();
+    game.start();
+    logEl.textContent = '';
+    log('====== BATTLE START! Defeat the enemy robot! ======');
+    log('(Both robots act at the SAME time — predict its move!)', 'dim');
+    $('overlay').classList.add('hidden');
+    disarmFlee();
+    show('game');
+    render();
+  }
+
+  function disarmFlee() {
+    fleeArmed = false;
+    clearTimeout(fleeTimer);
+    var b = $('k-q');
+    b.textContent = 'FLEE';
+    b.classList.remove('armed');
+  }
+  function fleePress() {
+    if (current !== 'game' || !game || game.over) return;
+    if (!fleeArmed) {
+      fleeArmed = true;
+      var b = $('k-q');
+      b.textContent = 'CONFIRM?';
+      b.classList.add('armed');
+      log('>> Fleeing counts as a LOSS — press FLEE again to confirm.', 'warn');
+      fleeTimer = setTimeout(disarmFlee, 3500);
+      return;
+    }
+    disarmFlee();
+    game.submit('q');
+    render();
+    finish();
+  }
+
+  function statTile(v, k, cls) {
+    return '<div class="stat ' + cls + '"><div class="v">' + v + '</div><div class="k">' + k + '</div></div>';
+  }
+  function renderStats() {
+    var s = Stats.summary(), body = $('stats-body');
+    if (s.total === 0) {
+      body.innerHTML = '<p class="menu-note" style="margin-top:30px">No games played yet. Go fight!</p>';
+      $('st-clear').classList.add('hidden');
+    } else {
+      body.innerHTML = '<div class="stats-grid">'
+        + statTile(s.total, 'TOTAL GAMES', '')
+        + statTile(s.wins, 'WINS', 'win')
+        + statTile(s.losses, 'LOSSES', 'loss')
+        + statTile(s.draws, 'DRAWS', 'draw')
+        + statTile(s.winRate + '%', 'WIN RATE', 'rate')
+        + statTile(s.avgRounds, 'AVG ROUNDS', '')
+        + '</div>';
+      $('st-clear').classList.remove('hidden');
+    }
+  }
+  function disarmClear() {
+    clearArmed = false;
+    clearTimeout(clearTimer);
+    var b = $('st-clear');
+    b.textContent = 'CLEAR RECORD';
+    b.classList.remove('armed');
+  }
+  $('st-clear').addEventListener('click', function () {
+    if (!clearArmed) {
+      clearArmed = true;
+      var b = $('st-clear');
+      b.textContent = 'CONFIRM CLEAR?';
+      b.classList.add('armed');
+      clearTimer = setTimeout(disarmClear, 3500);
+      return;
+    }
+    disarmClear();
+    Stats.clear();
+    renderStats();
+  });
+
+  /* wiring */
+  $('m-new').addEventListener('click', newGame);
+  $('m-stats').addEventListener('click', function () { renderStats(); show('stats'); });
+  $('m-help').addEventListener('click', function () { show('help'); });
+  $('st-back').addEventListener('click', function () { disarmClear(); show('menu'); });
+  $('h-back').addEventListener('click', function () { show('menu'); });
+  $('o-rematch').addEventListener('click', newGame);
+  $('o-menu').addEventListener('click', function () { show('menu'); });
+  $('rangechk').addEventListener('change', function () { if (game) render(); });
+
+  var cmdBtns = { 'k-w': 'w', 'k-a': 'a', 'k-s': 's', 'k-d': 'd', 'k-f': 'f' };
+  Object.keys(cmdBtns).forEach(function (id) {
+    $(id).addEventListener('click', function (ev) {
+      handle(cmdBtns[id]);
+      ev.currentTarget.blur();
+    });
+  });
+  $('k-q').addEventListener('click', function (ev) { fleePress(); ev.currentTarget.blur(); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+    if (current === 'menu') {
+      if (k === '1') newGame();
+      else if (k === '2') { renderStats(); show('stats'); }
+      else if (k === '3') show('help');
+      return;
+    }
+    if (current !== 'game') {
+      if (k === 'escape') { disarmClear(); show('menu'); }
+      return;
+    }
+    if (game && game.over) {
+      if (k === 'enter') newGame();
+      else if (k === 'escape') show('menu');
+      return;
+    }
+    if (k === 'q') { e.preventDefault(); fleePress(); return; }
+    var map = { arrowup: 'w', arrowdown: 's', arrowleft: 'a', arrowright: 'd', w: 'w', a: 'a', s: 's', d: 'd', f: 'f', ' ': 'f' };
+    if (Object.prototype.hasOwnProperty.call(map, k)) {
+      e.preventDefault();
+      handle(map[k]);
+    }
+  });
+
+  show('menu');
+}
+
+if (typeof document !== 'undefined' && document.getElementById && document.getElementById('grid')) {
+  initUI();
+}
+/* Node/test hook: lets the game logic run headless, outside a browser. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    GRID_ROWS: GRID_ROWS, GRID_COLS: GRID_COLS, OBSTACLE_COUNT: OBSTACLE_COUNT,
+    CELL_EMPTY: CELL_EMPTY, CELL_OBSTACLE: CELL_OBSTACLE, CELL_PLAYER: CELL_PLAYER, CELL_ENEMY: CELL_ENEMY,
+    Robot: Robot, Battlefield: Battlefield, EnemyAI: EnemyAI, Stats: Stats, Game: Game
+  };
+}
+</script>
+</body>
+</html>
